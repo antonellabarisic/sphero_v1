@@ -1,0 +1,27 @@
+<launch>
+
+	<arg name="adr1" default="e6:cd:44:a7:ef:7d"/> <!-- Sphero1 address -->
+	<arg name="prvi" default="1"/> <!-- Sphero number -->
+
+	<arg name="adr2" default="fb:28:2c:0b:75:19"/> <!-- Sphero2 address -->
+	<arg name="drugi" default="2"/> <!-- Sphero number -->
+
+	<arg name="adr12" default="DD:4E:63:F6:8F:DA"/> <!-- Sphero12 address -->
+	<arg name="dvanaesti" default="12"/> <!-- Sphero number -->
+
+	<node pkg="sphero_sprk" type="my_node.py" name="sphero1" output="screen" >
+		<param name="adresa" type="str" value="$(arg adr1)"/>
+		<param name="num" type="str" value="$(arg prvi)"/>
+	</node>
+
+	<node pkg="sphero_sprk" type="my_node.py" name="sphero2" output="screen" >
+		<param name="adresa" type="str" value="$(arg adr2)"/>
+		<param name="num" type="str" value="$(arg drugi)"/>
+	</node>
+
+	<node pkg="sphero_sprk" type="my_node.py" name="sphero12" output="screen" >
+		<param name="adresa" type="str" value="$(arg adr12)"/>
+		<param name="num" type="str" value="$(arg dvanaesti)"/>
+	</node>
+
+</launch>
