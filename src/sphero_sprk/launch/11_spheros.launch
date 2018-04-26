@@ -35,57 +35,57 @@
 
 
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero1" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_1" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr1)"/>
 		<param name="num" type="str" value="$(arg prvi)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero2" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_2" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr2)"/>
 		<param name="num" type="str" value="$(arg drugi)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero3" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_3" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr3)"/>
 		<param name="num" type="str" value="$(arg treci)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero4" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_4" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr4)"/>
 		<param name="num" type="str" value="$(arg cetvrti)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero5" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_5" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr5)"/>
 		<param name="num" type="str" value="$(arg peti)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero6" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_6" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr6)"/>
 		<param name="num" type="str" value="$(arg sesti)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero7" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_7" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr7)"/>
 		<param name="num" type="str" value="$(arg sedmi)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero8" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_8" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr8)"/>
 		<param name="num" type="str" value="$(arg osmi)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero9" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_9" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr9)"/>
 		<param name="num" type="str" value="$(arg deveti)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero10" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_10" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr10)"/>
 		<param name="num" type="str" value="$(arg deseti)"/>
 	</node>
 
-	<node pkg="sphero_sprk" type="my_node.py" name="sphero11" output="screen" >
+	<node pkg="sphero_sprk" type="sphero_driver.py" name="driver" ns="sphero_11" output="screen" >
 		<param name="adresa" type="str" value="$(arg adr11)"/>
 		<param name="num" type="str" value="$(arg jedanaesti)"/>
 	</node>

@@ -22,7 +22,8 @@ class SpheroNode(object):
 
         self.is_connected = False
         self._node_name = rospy.get_name()
-        self._address = rospy.get_param(self._node_name + "/adresa")
+        self._namespace = rospy.get_namespace()
+        self._address = rospy.get_param("adresa")
         self.robot = Sphero(self._address)
 
         self._init_pubsub()
@@ -53,7 +54,7 @@ class SpheroNode(object):
     def start(self):
         try:
             self.is_connected = self.robot.connect()
-            rospy.loginfo("Connected to Sphero %s" % self._node_name +
+            rospy.loginfo("Connected to Sphero %s" % self._namespace +
                           "\n with address: %s" % self._address)
         except:
             rospy.logerr("Failed to connect to Sphero.")
@@ -82,7 +83,7 @@ class SpheroNode(object):
         self.is_connected = self.robot.disconnect()
         self.robot.join()
 
-        # commands
+    # commands
     def cmd_vel(self, msg):
         if self.is_connected:
             self.last_cmd_vel_time = rospy.Time.now()
