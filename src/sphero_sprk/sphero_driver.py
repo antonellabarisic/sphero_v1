@@ -23,7 +23,7 @@ class SpheroNode(object):
         self.is_connected = False
         self._node_name = rospy.get_name()
         self._namespace = rospy.get_namespace()
-        self._address = rospy.get_param("adresa")
+        self._address = rospy.get_param("~adresa")
         self.robot = Sphero(self._address)
 
         self._init_pubsub()
@@ -89,9 +89,9 @@ class SpheroNode(object):
             self.last_cmd_vel_time = rospy.Time.now()
             self.cmd_heading = self.normalize_angle_positive(
                 math.atan2(msg.linear.x, msg.linear.y)) * 180 / math.pi
-            print(self.cmd_heading)
+            #print(self.cmd_heading)
             self.cmd_speed = math.sqrt(math.pow(msg.linear.x, 2) + math.pow(msg.linear.y, 2))
-            print(self.cmd_speed)
+            #print(self.cmd_speed)
             self.robot.roll(int(self.cmd_speed), int(self.cmd_heading), 1, False)
 
     def set_color(self, msg):
@@ -102,12 +102,15 @@ class SpheroNode(object):
         if self.is_connected:
             if not msg.data:
                 self.robot.set_stabilization(1, False)
+                print ('Stabilization on')
             else:
                 self.robot.set_stabilization(0, False)
+                print ('Stabilization off')
 
     def set_heading(self, msg):
         if self.is_connected:
             heading_deg = int(self.normalize_angle_positive(msg.data) * 180.0 / math.pi)
+            print heading_deg
             self.robot.set_heading(heading_deg, False)
 
     def set_angular_velocity(self, msg):
