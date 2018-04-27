@@ -185,7 +185,7 @@ class Sphero(threading.Thread):   #object
         self._stream_rate = 10
         self.shutdown = False
         #load the mask list
-       
+
         with open(os.path.join(os.path.dirname(__file__),'data','mask_list.yaml'),'r') as mask_file:
              self._mask_list = yaml.load(mask_file)
         self._curr_data_mask = bytearray.fromhex("0000 0000")
@@ -251,7 +251,7 @@ class Sphero(threading.Thread):   #object
 
         with self._notification_lock:
           self._cmd_characteristics[CommandsCharacteristic].write(''.join(struct.pack('B',x) for x in output))
-        return self.seq       
+        return self.seq
 
     def _listening_loop(self):
         pass
@@ -278,7 +278,7 @@ class Sphero(threading.Thread):   #object
         """
         helper function that converts int or string to bytes
         """
-        if isinstance(arr,list): 
+        if isinstance(arr,list):
             for i,value in enumerate(arr):
                 if isinstance(value,int):
                     arr[i] = to_bytes(value,1,'big')
@@ -345,7 +345,7 @@ class Sphero(threading.Thread):   #object
         :param enable: 00h for off and 01h for on (on by default).
         :param response: request response back from Sphero.
         """
-        data = ["01" if bool_flag else "00"]
+        data = [0x01 if bool_flag else 0x00]
         self.send(REQ['CMD_SET_STABILIZ'],data, resp=resp)
 
 
@@ -362,9 +362,9 @@ class Sphero(threading.Thread):   #object
         :param power: 0-255 scalar value (units?).
         """
         data = [lmode, int(lpower), rmode, int(rpower)]
-        
+
         #By default, we going to cancel it
-        self.send(REQ['CMD_SET_RAW_MOTORS'],data, resp=resp) 
+        self.send(REQ['CMD_SET_RAW_MOTORS'],data, resp=resp)
 
     def set_rotation_rate(self, rate, resp):
         """
