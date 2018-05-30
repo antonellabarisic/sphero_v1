@@ -4,6 +4,7 @@ import sys
 import time
 import binascii
 import os
+import operator
 import threading
 import struct
 
@@ -72,6 +73,7 @@ REQ = dict(
   CMD_CLEAR_COUNTERS = [0x00, 0x42],
   CMD_ASSIGN_COUNTER = [0x00, 0x50],
   CMD_POLL_TIMES = [0x00, 0x51],
+
   CMD_SET_HEADING = [0x02, 0x01],
   CMD_SET_STABILIZ = [0x02, 0x02],
   CMD_SET_ROTATION_RATE = [0x02, 0x03],
@@ -79,6 +81,9 @@ REQ = dict(
   CMD_GET_APP_CONFIG_BLK = [0x02, 0x05],
   CMD_SET_DATA_STRM = [0x02, 0x11],
   CMD_CFG_COL_DET = [0x02, 0x12],
+  CMD_LOCATOR= [0x02, 0x13],  #dodano configure
+  CMD_READ_LOCATOR= [0x02, 0x15],
+
   CMD_SET_RGB_LED = [0x02, 0x20],
   CMD_SET_BACK_LED = [0x02, 0x21],
   CMD_GET_RGB_LED = [0x02, 0x22],
@@ -140,6 +145,13 @@ STRM_MASK2 = dict(
   VELOCITY_X         = 0x01000000,
   VELOCITY_Y         = 0x00800000)
 
+LOC_MASK = dict(
+  VELOCITY_X         = 0x01000000,
+  VELOCITY_Y         = 0x00800000,
+  ODOM_X             = 0x08000000,
+  ODOM_Y             = 0x04000000
+  )
+
 class DelegateObj(bluepy.btle.DefaultDelegate):
     """
     Delegate object that get calls when there is a notification
@@ -154,6 +166,146 @@ class DelegateObj(bluepy.btle.DefaultDelegate):
         self._buffer_bytes = b''
         self._notification_lock = lock
 
+        #init callback dictionaries
+        self._async_callback_dict = dict()
+        self._sync_callback_dict = dict()
+
+    def register_callback(self, seq, callback):
+        self._callback_dict[seq] = callback
+
+    def register_async_callback(self, group_name, callback):
+        self._data_group_callback[group_name] = callback
+        self._enabled_group = list(set(self._enabled_group) | set([group_name]))
+
+    def handle_callbacks(self, packet):
+        #unregister callback
+        callback = self._callback_dict.pop(packet[3])
+        MRSP = packet[2]
+        dlen = (packet[4] - 1)
+        data = []
+        if(dlen > 0):
+            data = packet[5:5+dlen]
+        #parse the packet
+        callback(MRSP, data)
+
+    def wait_for_resp(self,seq,timeout=None):
+        #function waits for a response in the handle notification part
+        self._wait_list[seq] = None;
+        while(self._wait_list[seq] == None):
+            with self._notification_lock:
+                self._sphero_obj._device.waitForNotifications(0.05)
+        return self._wait_list.pop(seq)
+
+    def wait_for_sim_response(self, seq, timeout=None):
+        #function waits for a response in the handle notification part
+        self._wait_list[seq] = None;
+        while(self._wait_list[seq] == None):
+            with self._notification_lock:
+                self._sphero_obj._device.waitForNotifications(0.05)
+        data = self._wait_list.pop(seq)
+        return (len(data) == 6 and data[0] == 255)    
+
+    def parse_single_pack(self, data):
+        if self._sphero_obj.is_connected:
+          if(data[1] == '\xff'): #255
+
+              #get the sequence number and check if a callback is assigned
+              if(data[3] in self._callback_dict):
+                  self.handle_callbacks(data)
+              #check if we have it in the wait list
+              elif(from_bytes(data[3],'big') in self._wait_list):
+                  self._wait_list[from_bytes(data[3],'big')] = data
+              #simple response
+              elif(len(data) == 6 and data[0] == 255 and data[2] == 0):
+                  pass
+                  #print("receive simple response for seq:{}".format(data[3]))
+              else:
+                  print("unknown response:{}".format(data))
+              #Sync Message
+          elif(data[1] == '\xfe'): #254
+              #Async Message
+              data_length = (ord(data[3])<<8)+ord(data[4])
+              data_packet = data[:(5+data_length)]
+
+              if(data[2] == '\x03'):
+                self._data_group_callback['\x03'](self.parse_data_strm(data_packet, data_length))
+              elif (data[2]=='\x01'): #and self._enabled_group.has_key(IDCODE['PWR_NOTIFY'])):
+                self._data_group_callback['\x01'](self.parse_pwr_notify(data_packet, data_length))
+              else:
+                print("unknown async response:{}".format(data))
+          else:
+              pass
+
+    def handleNotification(self, cHandle, data):
+        #merge the data with previous incomplete instance
+        self._buffer_bytes =  self._buffer_bytes + data
+
+        #loop through it and see if it's valid
+        while(len(self._buffer_bytes) > 5): #we need at least 6 bytes
+                #split the data until it's a valid chunk
+                i=0
+                len_int=0
+                chks_pckt=0
+                if ((self._buffer_bytes[0]=='\xff') and ((self._buffer_bytes[1]=='\xff') or (self._buffer_bytes[1]=='\xfe'))):
+                    #assuming we found the start od the packet
+                    if (self._buffer_bytes[i+1]=='\xff'):
+                      #sync
+                      len_int=ord(self._buffer_bytes[i+4])
+                      chks_pckt=cal_packet_checksum(self._buffer_bytes[i+2:i+5+len_int-1]) #not sure 5 or 6 
+                      if (len(self._buffer_bytes)>=(len_int+5)):
+                        if (chks_pckt==ord(self._buffer_bytes[4+len_int])):
+                          #data valid
+                          data_s_pack=self._buffer_bytes[0:5+len_int]
+                          self._buffer_bytes=self._buffer_bytes[len_int+5:]
+                          self.parse_single_pack(data_s_pack)
+                        else:
+                          #checksum not good
+                          self._buffer_bytes=self._buffer_bytes[1:]
+                      else:
+                        break
+
+                    elif (self._buffer_bytes[i+1]=='\xfe'):
+                      #async
+                      len_int=(ord(self._buffer_bytes[i+3])<<8)+ord(self._buffer_bytes[i+4])
+                      chks_pckt=cal_packet_checksum(self._buffer_bytes[i+2:i+5+len_int-1]) #-1 for excluding checksum 
+                      if (len(self._buffer_bytes)>=(len_int+5)):
+                        if (chks_pckt==ord(self._buffer_bytes[4+len_int])):
+                          #data valid
+                          data_s_pack=self._buffer_bytes[0:4+len_int]
+                          self._buffer_bytes=self._buffer_bytes[len_int+4:]
+                          self.parse_single_pack(data_s_pack)
+                        else:
+                          #checksum not good
+                          self._buffer_bytes=self._buffer_bytes[1:]
+                      elif(len_int>300):
+                        self._buffer_bytes=self._buffer_bytes[1:]
+                      else:
+                        break
+                else:
+                    self._buffer_bytes=self._buffer_bytes[1:]
+
+
+    def parse_pwr_notify(self, data, data_length):
+      """
+      The data payload of the async message is 1h bytes long and
+      formatted as follows::
+        --------
+        |State |
+        --------
+      The power state byte: 
+        * 01h = Battery Charging, 
+        * 02h = Battery OK,
+        * 03h = Battery Low, 
+        * 04h = Battery Critical
+      """
+      return struct.unpack_from('B', ''.join(data[5:]))[0]
+
+    def parse_data_strm(self, data, data_length):
+      output={}
+      for i in range((data_length-1)/2):
+        unpack = struct.unpack_from('>h', ''.join(data[5+2*i:]))
+        output[self._sphero_obj.mask_list[i]] = unpack[0]
+      return output
 
 class Sphero(threading.Thread):   #object
 
@@ -162,12 +314,6 @@ class Sphero(threading.Thread):   #object
     RAW_MOTOR_MODE_REVERSE = "02"
     RAW_MOTOR_MODE_BRAKE = "03"
     RAW_MOTOR_MODE_IGNORE = "04"
-
-
-    # def con_b(n, length, endianess='big'):
-    #     h = '%x' % n
-    #     s = ('0'*(len(h) % 2) + h).zfill(length*2).decode('hex')
-    #     return s if endianess == 'big' else s[::-1]
 
     def __init__(self, addr=None):
         threading.Thread.__init__(self)
@@ -180,15 +326,13 @@ class Sphero(threading.Thread):   #object
             addr = sphero_list[0]
 
         self._addr = addr
-        self._connected = False
+        self.is_connected = False
         self.seq=0
         self._stream_rate = 10
         self.shutdown = False
         #load the mask list
-       
-        with open(os.path.join(os.path.dirname(__file__),'data','mask_list.yaml'),'r') as mask_file:
-             self._mask_list = yaml.load(mask_file)
-        self._curr_data_mask = bytearray.fromhex("0000 0000")
+        self.stream_mask1 = None
+        self.stream_mask2 = None
 
         self._notification_lock = threading.RLock() #RLock
         #start a listener loop
@@ -203,7 +347,7 @@ class Sphero(threading.Thread):   #object
         self._device.withDelegate(self._notifier)
 
         self._devModeOn()
-        self._connected = True #Might need to change to be a callback format
+        self.is_connected = True #Might need to change to be a callback format
         #get the command service
         cmd_service = self._device.getServiceByUUID(RobotControlService)
         self._cmd_characteristics = {}
@@ -282,13 +426,48 @@ class Sphero(threading.Thread):   #object
             for i,value in enumerate(arr):
                 if isinstance(value,int):
                     arr[i] = to_bytes(value,1,'big')
-                    print(repr("%s"%arr[i]))
         return arr
+
+    def create_mask_list(self, mask1, mask2):
+        #save the mask
+        sorted_STRM1 = sorted(STRM_MASK1.iteritems(), key=operator.itemgetter(1), reverse=True)
+        #create a list containing the keys that are part of the mask
+        self.mask_list1 = [key  for key, value in sorted_STRM1 if value & mask1]
+
+        sorted_STRM2 = sorted(STRM_MASK2.iteritems(), key=operator.itemgetter(1), reverse=True)
+        #create a list containing the keys that are part of the mask
+        self.mask_list2 = [key  for key, value in sorted_STRM2 if value & mask2]
+        self.mask_list = self.mask_list1 + self.mask_list2
 
     """ CORE functionality """
 
     def ping(self,resp=True):
         return self.send(REQ['CMD_PING'],[],resp)
+
+    def get_device_name(self,resp):
+        seq_num = self.send(REQ['CMD_GET_BT_NAME'],[],resp)
+        response = self._notifier.wait_for_resp(seq_num)
+        name_data = {}
+        name_data["name"] = response[5:12].decode('utf-8') #21
+        name_data["bta"]=response[21:33].decode('utf-8')
+        name_data["color"]=response[33:36].decode("utf-8")
+        return name_data
+
+    def set_locator(self,resp):
+        self.send(REQ['CMD_LOCATOR'],[1,0,0,0],resp) #'\x00\x00\x00'
+
+
+    def read_locator(self,resp):
+        seq_num=self.send(REQ['CMD_READ_LOCATOR'],[],resp)
+        response = self._notifier.wait_for_resp(seq_num)
+        mask_locator = [key  for key in LOC_MASK if (1)]
+        loc={}
+        output={}
+        for i in range(4):
+          unpack = struct.unpack_from('>h', ''.join(response[5+2*i:]))
+          output[mask_locator[i]] = unpack[0]
+        return output
+
 
     """ Sphero functionality """
 
@@ -379,6 +558,81 @@ class Sphero(threading.Thread):   #object
         :param response: request response back from Sphero.
         """
         self.send(REQ['CMD_SET_ROTATION_RATE'],[self.clamp(rate, 0, 255)], resp)
+
+  #get commands
+
+    def set_power_notify(self, enable, response):
+        """
+        This enables Sphero to asynchronously notify the Client
+        periodically with the power state or immediately when the power
+        manager detects a state change. Timed notifications arrive every 10
+        seconds until they're explicitly disabled or Sphero is unpaired. The
+        flag is as you would expect, 00h to disable and 01h to enable.
+        :param enable: 00h to disable and 01h to enable power notifications.
+        :param response: request response back from Sphero.
+        """
+        self.send(REQ['CMD_SET_PWR_NOTIFY'],[enable], response)
+
+    def get_power_state(self, response):
+        """
+        This returns the current power state and some additional
+        parameters to the Client.
+        :param response: request response back from Sphero.
+        """
+        self.send(REQ['CMD_GET_PWR_STATE'],[], response)
+
+    def set_filtered_data_strm(self, sample_div, sample_frames, pcnt, response):
+        """
+        Helper function to add all the filtered data to the data strm
+        mask, so that the user doesn't have to set the data strm manually.
+
+        :param sample_div: divisor of the maximum sensor sampling rate.
+        :param sample_frames: number of sample frames emitted per packet.
+        :param pcnt: packet count (set to 0 for unlimited streaming).
+        :param response: request response back from Sphero.
+        """
+        mask1 = 0
+        mask2 = 0
+        for key,value in STRM_MASK1.iteritems():
+          if 'FILTERED' in key:
+            mask1 = mask1|value
+        for value in STRM_MASK2.itervalues(): #bez key i itervalues
+            mask2 = mask2|value
+        self.set_data_strm(sample_div, sample_frames, mask1, pcnt, mask2, response)
+
+    def set_data_strm(self, sample_div, sample_frames, sample_mask1, pcnt, sample_mask2, response):
+        """
+        Currently the control system runs at 400Hz and because it's pretty
+        unlikely you will want to see data at that rate, N allows you to
+        divide that down. sample_div = 2 yields data samples at 200Hz,
+        sample_div = 10, 40Hz, etc. Every data sample consists of a
+        "frame" made up of the individual sensor values as defined by the
+        sample_mask. The sample_frames value defines how many frames to
+        collect in memory before the packet is emitted. In this sense, it
+        controls the latency of the data you receive. Increasing
+        sample_div and the number of bits set in sample_mask drive the
+        required throughput. You should experiment with different values
+        of sample_div, sample_frames and sample_mask to see what works
+        best for you.
+        :param sample_div: divisor of the maximum sensor sampling rate.
+        :param sample_frames: number of sample frames emitted per packet.
+        :param sample_mask1: bitwise selector of data sources to stream.
+        :param pcnt: packet count (set to 0 for unlimited streaming).
+        :param response: request response back from Sphero.
+        """
+        self.send(REQ['CMD_SET_DATA_STRM'], \
+          [(sample_div>>8), (sample_div & 0xff), (sample_frames>>8), (sample_frames & 0xff), ((sample_mask1>>24) & 0xff), \
+          ((sample_mask1>>16) & 0xff),((sample_mask1>>8) & 0xff), (sample_mask1 & 0xff), pcnt, ((sample_mask2>>24) & 0xff), \
+          ((sample_mask2>>16) & 0xff),((sample_mask2>>8) & 0xff), (sample_mask2 & 0xff)], response)
+
+        self.create_mask_list(sample_mask1, sample_mask2)
+        self.stream_mask1 = sample_mask1
+        self.stream_mask2 = sample_mask2
+
+  #callbacks
+
+    def add_async_callback(self, callback_type, callback):
+        self._notifier.register_async_callback(callback_type,callback)
 
     def disconnect(self):
         self.is_connected = False
